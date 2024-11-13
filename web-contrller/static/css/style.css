@@ -1,0 +1,69 @@
+* {
+    box-sizing: border-box;
+    font-family: monospace;
+}
+
+body {
+    color: #f9fafb;
+    background-color: #020617;
+}
+
+.title {
+    font-size: 1.25rem;
+    font-weight: bold;
+}
+
+.connect-arduino {
+    position: relative;
+    top: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.connect-arduino .connection-status {
+    text-align: center;
+    font-size: 1.5rem;
+    color: #dc2626;
+}
+
+.connection-options {
+    width: 100%;
+    height: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+}
+
+.options {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.options select {
+    height: 2rem;
+}
+
+.connection-options button {
+    cursor: pointer;
+}
+
+.auv-controls {
+    position: relative;
+    top: 2rem;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+}
+
+.auv-controls button {
+    width: 8rem;
+}
+
+.auv-controls button:hover {
+    cursor: pointer;
+}
+
+

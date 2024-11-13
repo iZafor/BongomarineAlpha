@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BongoMarine Controller</title>
+    <!-- <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"> -->
+     <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <div class="connect-arduino">
+        <div class="connection-options">
+            <div class="options">
+                <h3 class="title">Serial Port:</h3>
+                <select>
+                    <option value="">ttyUSB0</option>
+                    <option value="">ttyACM0</option>
+                </select>
+            </div>
+            <div class="options">
+                <h3 class="title">Baud Rate:</h3>
+                <select>
+                    <option value="">9600</option>
+                    <option value="">115200</option>
+                </select>
+            </div>
+            <button>Connect</button>
+        </div>
+        <h3 class="connection-status">Not Connected!</h3>
+    </div>
+
+    <div class="auv-controls">
+        <button>UP</button>
+        <button>DOWN</button>
+        <button>LEFT</button>
+        <button>RIGHT</button>
+        <button>FROWARD</button>
+        <button>BACKWARD</button>
+    </div>
+</body>
+</html>
