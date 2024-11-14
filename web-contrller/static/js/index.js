@@ -1,3 +1,15 @@
+const keyMap = {
+    "w": "f", // forward
+    "s": "b", // backward
+    "arrowup": "u", // upward
+    "arrowdown": "d", // downward
+    "a": "l", // left
+    "d": "r", // right
+    "p": "p", // PID on/off
+    "o": "o", // ping flag
+    "f": "s", // stop all
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     const portOptions = document.getElementById("port-options");
     const baudRateOptions = document.getElementById("baud-rate-options");
@@ -44,4 +56,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const byte = event.target.value;
         sock.emit(sendByteToArduinoPath, { byte });
     }));
+
+    document.addEventListener("keydown", (event) => {
+        const byte = keyMap[event.key.toLowerCase()];
+        if (byte) {
+            sock.emit(sendByteToArduinoPath, { byte });
+        }
+    });
 });

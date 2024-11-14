@@ -8,10 +8,14 @@
             href="{{ url_for('static', filename='css/style.css') }}"
             rel="stylesheet"
         />
-        <script src="https://cdn.socket.io/4.8.0/socket.io.min.js" integrity="sha384-OoIbkvzsFFQAG88r+IqMAjyOtYDPGO0cqK5HF5Uosdy/zUEGySeAzytENMDynREd" crossorigin="anonymous"></script>
+        <script
+            src="https://cdn.socket.io/4.8.0/socket.io.min.js"
+            integrity="sha384-OoIbkvzsFFQAG88r+IqMAjyOtYDPGO0cqK5HF5Uosdy/zUEGySeAzytENMDynREd"
+            crossorigin="anonymous"
+        ></script>
         <script src="{{ url_for('static', filename='js/index.js') }}"></script>
         <script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
-        <!-- <link rel="stylesheet" href="../static/css/style.css"> -->
+        <!-- <link rel="stylesheet" href="../static/css/style.css" /> -->
     </head>
     <body>
         <div class="connect-arduino">
@@ -20,7 +24,7 @@
                     <h3 class="title">Serial Port:</h3>
                     <select id="port-options">
                         {% for port in ports %}
-                            <option value="{{ port }}">{{ port }}</option>
+                        <option value="{{ port }}">{{ port }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -36,13 +40,30 @@
             <h3 class="connection-status">Not Connected!</h3>
         </div>
 
-        <div class="auv-controls">
-            <button class="control-button" value="u">UP</button>
-            <button class="control-button" value="d">DOWN</button>
-            <button class="control-button" value="l">LEFT</button>
-            <button class="control-button" value="r">RIGHT</button>
-            <button class="control-button" value="f">FROWARD</button>
-            <button class="control-button" value="b">BACKWARD</button>
+        <div style="position: relative">
+            <div class="auv-control-buttons">
+                <button class="control-button" value="u">UP</button>
+                <button class="control-button" value="d">DOWN</button>
+                <button class="control-button" value="l">LEFT</button>
+                <button class="control-button" value="r">RIGHT</button>
+                <button class="control-button" value="f">FROWARD</button>
+                <button class="control-button" value="b">BACKWARD</button>
+                <button class="control-button" value="s">ALL STOP</button>
+            </div>
+            <div class="key-controls">
+                <h3 class="title">Keyboard Controls</h3>
+                <ul>
+                    <li>Press <strong class="key">W</strong> to move forward</li>
+                    <li>Press <strong class="key">S</strong> to move backward</li>
+                    <li>Press <strong class="key">ARROW UP</strong> to move upward</li>
+                    <li>Press <strong class="key">ARROW DOWN</strong> to move downward</li>
+                    <li>Press <strong class="key">A</strong> to move left</li>
+                    <li>Press <strong class="key">D</strong> to move right</li>
+                    <li>Press <strong class="key">F</strong> to stop all motors</li>
+                    <li>Press <strong class="key">P</strong> to on/off PID</li>
+                    <li>Press <strong class="key">O</strong> to set ping flag</li>
+                </ul>
+            </div>
         </div>
     </body>
 </html>
