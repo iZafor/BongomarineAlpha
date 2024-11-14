@@ -44,10 +44,12 @@ body {
 
 .options select {
     height: 2rem;
+    border-radius: .25rem;
+    padding: 0 .25rem;
 }
 
-.connection-options button {
-    cursor: pointer;
+select:focus-visible {
+    outline: none;
 }
 
 .auv-control-buttons {
@@ -59,16 +61,12 @@ body {
 }
 
 .auv-control-buttons button {
-    width: 8rem;
-}
-
-.auv-control-buttons button:hover {
-    cursor: pointer;
+    width: 8rem;;
 }
 
 .key-controls {
     position: absolute;
-    top: 6rem;
+    top: 5rem;
     left: 50%;
     transform: translateX(-50%);
 }
@@ -85,4 +83,20 @@ body {
     background: #64748b;
     padding: 0 0.25rem;
     border-radius: 0.25rem;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: .25rem;
+    height: 2rem;
+}
+
+button:focus-visible {
+    outline: none;
+}
+
+button:hover {
+    color: #f8fafc;
+    background-color: #94a3b8;
 }
