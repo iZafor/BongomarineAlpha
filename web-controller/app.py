@@ -30,7 +30,7 @@ def handle_arduino_connection(data):
             emit("connect-arduino", {"status": True})
         except serial.SerialException as e:
             print(f"error connecting to Arduino: {e}")
-            emit("connect-arduino", {"status": False})
+            emit("connect-arduino", {"status": False, "error": e.strerror})
     else:
         emit("connect-arduino", {"status": False})
 
@@ -38,8 +38,10 @@ def handle_arduino_connection(data):
 def handle_send_byte_to_arduino(data):
     global ser
 
-    if not ser:
-        return emit("connect-arduino", {"status": False})    
+    if not ser or not ser.is_open:
+        ports = [p.device for p in list_ports.comports() if "USB" in p.device or "ACM" in p.device]
+        print(f"ports: {ports}")
+        return emit("connect-arduino", {"status": False, "ports": ports})    
     
     byte = data.get("byte")
     if not byte:
@@ -52,11 +54,17 @@ def handle_send_byte_to_arduino(data):
         except serial.SerialTimeoutException as e:
             print(f"write operation timed out. error: {e}")
             ser.close()
-            return emit("send-byte-to-arduino", {"status": False})
+            ports = [p.device for p in list_ports.comports() if "USB" in p.device or "ACM" in p.device]
+            emit("connect-arduino", {"status": False})
+            return emit("send-byte-to-arduino", {"status": False, "ports": ports})
         except serial.SerialException as e:
             print(f"unexpected error occurred! error: {e}")
             ser.close()
-            return emit("send-byte-to-arduino", {"status": False})
+            ports = [p.device for p in list_ports.comports() if "USB" in p.device or "ACM" in p.device]
+            emit("connect-arduino", {"status": False})
+            return emit("send-byte-to-arduino", {"status": False, "ports": ports})
 
 if __name__ == '__main__':
+    global ser
+    ser = None
     sock.run(app, debug=True)

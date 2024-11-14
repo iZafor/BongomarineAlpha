@@ -10,12 +10,24 @@ const keyMap = {
     "f": "s", // stop all
 };
 
+function updatePorts(node, ports) {
+    console.log({ports});
+    if (ports && ports.length >= 0) {
+        node.innerHTML = "";
+        ports.forEach(p => {
+            const option = document.createElement("option");
+            option.value = p;
+            option.innerText = p;
+            node.appendChild(option);
+        });
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const portOptions = document.getElementById("port-options");
     const baudRateOptions = document.getElementById("baud-rate-options");
     const connectButton = document.getElementById("arduino-connect-button");
-    const connectionStatusText = document.querySelector
-    (".connection-status");
+    const connectionStatusText = document.querySelector(".connection-status");
 
     const arduinoConnectionPath = "connect-arduino";
     const sendByteToArduinoPath = "send-byte-to-arduino";
@@ -33,11 +45,18 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             connectionStatusText.innerHTML = "Not Connected!";
             connectionStatusText.style.color = "#dc2626";
+
+            if (data?.error) {
+                alert(data.error);
+            }
+
+            updatePorts(portOptions, data?.ports);
         }
     });
 
     sock.on(sendByteToArduinoPath, (data) => {
         console.log(data);
+        updatePorts(portOptions, data?.ports);
     });
 
     connectButton.addEventListener("click", () => {
