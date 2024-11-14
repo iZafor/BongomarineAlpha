@@ -16,10 +16,10 @@ document.addEventListener("DOMContentLoaded", () => {
     
     sock.on(arduinoConnectionPath, (data) => {
         if (data?.status) {
-            connectionStatusText.innerHTML = "Not Connected!";
+            connectionStatusText.innerHTML = "Connected";
             connectionStatusText.style.color = "#16a34a";
         } else {
-            connectionStatusText.innerHTML = "Connected";
+            connectionStatusText.innerHTML = "Not Connected!";
             connectionStatusText.style.color = "#dc2626";
         }
     });
