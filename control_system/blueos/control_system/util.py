@@ -1,5 +1,6 @@
 import time
 from pymavlink.mavutil import mavlink, mavtcp
+import RPi.GPIO as GPIO
 
 CONST = mavlink
 
@@ -87,3 +88,15 @@ def read_message(conn: mavtcp, message_type: any, timeout: float, print_message:
         return msg
     print(f"No message of type {message_type} received (timeout)")
     return None
+
+def get_kill_switch_status(pin: int) -> bool:
+    """
+    Args:
+        pin (int): GPIO pin number
+
+    Returns:
+        bool: **True** if the kill switch is activated, otherwise **False**
+    """
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+    return GPIO.input(pin) == GPIO.LOW

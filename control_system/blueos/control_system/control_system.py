@@ -122,11 +122,10 @@ class ControlSystem:
         """
         
         if self.vertical_pwms:
-            for ch, clock_dir in zip(self.vertical_thrusters, self.vertical_clock_dir):
-                if clock_dir:
-                    self.vertical_pwms[ch] = 1500 + vd
-                else:
-                    self.vertical_pwms[ch] = 1500 - vd
+            self.vertical_pwms[0] = 1500 + vd
+            self.vertical_pwms[1] = 1500 - vd
+            self.vertical_pwms[2] = 1500 - vd
+            self.vertical_pwms[3] = 1500 + vd
         else:
             print("No vertical thruster channel provided!")
 
@@ -139,11 +138,10 @@ class ControlSystem:
         """
         
         if self.vertical_pwms:
-            for ch, clock_dir in zip(self.vertical_thrusters, self.vertical_clock_dir):
-                if clock_dir:
-                    self.vertical_pwms[ch] = 1500 - vd
-                else:
-                    self.vertical_pwms[ch] = 1500 + vd
+            self.vertical_pwms[0] = 1500 - vd
+            self.vertical_pwms[1] = 1500 + vd
+            self.vertical_pwms[2] = 1500 + vd
+            self.vertical_pwms[3] = 1500 - vd
         else:
             print("No vertical thruster channel provided!")
 
@@ -225,7 +223,12 @@ q -> Quit
 hd <value> -> Set horizontal thruster value (0-500)
 vd <value> -> Set vertical thruster value (0-500)
 deg <value> -> Set heading angle
+ch <channel> <pwm> -> Set pwm value to channel
 : """)
+                if util.get_kill_switch_status(17):
+                    hd, vd = 0, 0
+                    print("Kill switch activated - Stopping motors")
+                
                 match command:
                     case "f":
                         self.move_forward(hd)
@@ -262,6 +265,18 @@ deg <value> -> Set heading angle
                         try:
                             vd = ControlSystem.validate_pwm(float(command.split()[1]))
                             print(f"Vertical deviation set to {vd}")
+                        except ValueError as e:
+                            print(f"Invalid value: {str(e)}")
+                    case x if x.startswith("ch "):
+                        try:
+                            ch = int(command.split()[1])
+                            if not (1 <= ch <= 8):
+                                raise ValueError("channel should be within 1 to 8")
+                            pwm = float(command.split()[2])
+                            if not (1000 <= pwm <= 2000):
+                                raise ValueError("pwm should be within 1000 to 2000")
+                            self.conn.set_servo(ch, pwm)
+                            print(f"channel {ch} set to {pwm} pwm")
                         except ValueError as e:
                             print(f"Invalid value: {str(e)}")
                     case x if x.startswith("deg "):
