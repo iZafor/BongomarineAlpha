@@ -67,3 +67,23 @@ def set_parameter(
             print(f"PARAM_VALUE received: {msg.param_id} = {msg.param_value}")
             break
     return True
+
+def read_message(conn: mavtcp, message_type: any, timeout: float, print_message: bool = True) -> any:
+    """
+    Reads a specific MAVLink message from the connection.
+
+    Args:
+        conn (mavtcp): Established MAVLink connection
+        message_type (any): Type of message to read
+        timeout (float): Time to wait for message in seconds
+
+    Returns:
+        any: Message if received within timeout, None otherwise
+    """
+    msg = conn.recv_match(type=message_type, blocking=True, timeout=timeout)
+    if msg:
+        if print_message:
+            print(f"Received message of type {message_type}: {msg}")
+        return msg
+    print(f"No message of type {message_type} received (timeout)")
+    return None
