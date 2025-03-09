@@ -1,8 +1,39 @@
 import time
 from pymavlink.mavutil import mavlink, mavtcp
-import RPi.GPIO as GPIO
 
 CONST = mavlink
+
+def map_value(value: float, from_low: float, from_high: float, to_low: float, to_high: float) -> float:
+    """
+    Maps a value from one range to another.
+    Args:
+        value (float): Value to map
+        from_low (float): Lower bound of the input range
+        from_high (float): Upper bound of the input range
+        to_low (float): Lower bound of the output range
+        to_high (float): Upper bound of the output range
+       
+    Returns:
+        float: Mapped value
+    """
+    return (value - from_low) * (to_high - to_low) / (from_high - from_low) + to_low
+
+def constrain_value(value: float, lower_end: float, upper_end: float) -> float:
+    """
+    Constrains a value to a specific range.
+    Args:
+        value (float): Value to constrain
+        lower_end (float): Lower bound of the range
+        upper_end (float): Upper bound of the range
+    
+    Returns:
+        float: Constrained value
+    """
+    if value < lower_end:
+        return lower_end
+    elif value > upper_end:
+        return upper_end
+    return value
 
 def verify_command_received(conn: mavtcp, command: any, timeout: float = 3) -> bool: 
     """
@@ -88,15 +119,3 @@ def read_message(conn: mavtcp, message_type: any, timeout: float, print_message:
         return msg
     print(f"No message of type {message_type} received (timeout)")
     return None
-
-def get_kill_switch_status(pin: int) -> bool:
-    """
-    Args:
-        pin (int): GPIO pin number
-
-    Returns:
-        bool: **True** if the kill switch is activated, otherwise **False**
-    """
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-    return GPIO.input(pin) == GPIO.LOW

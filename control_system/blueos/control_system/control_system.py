@@ -1,6 +1,10 @@
 import math
 from pymavlink import mavutil
-from control_system import util
+import util
+import lgpio
+import threading
+import time
+import ms5837
 
 CONST = mavutil.mavlink
 
@@ -20,6 +24,9 @@ class ControlSystem:
     def __init__(self, 
                 vertical_thrusters: list[int],
                 horizontal_thrusters: list[int],
+                hover_height: float,
+                max_hover_error: float,
+                kill_switch_gpio: int = 17,
                 ip: str = "127.0.0.1", 
                 port: int = 5777, 
                 connection_timeout: float = 10.0):
@@ -37,6 +44,14 @@ class ControlSystem:
         self.horizontal_thrusters = horizontal_thrusters
         self.horizontal_pwms = [1500.0] * len(horizontal_thrusters)
         
+        self.hover_height = hover_height
+        self.max_hover_error = max_hover_error
+        
+        self.gpio_handle = None
+        self.kill_switch_gpio = kill_switch_gpio
+
+        self.bar_sensor = ms5837.MS5837_30BA()
+        
     def enable_rc_control(self):
         """
         Sets SERVOx_FUNCTION value to RCINx. e.g. RCIN1 = 50 + 1 = 51, where x is the channel number.  
@@ -50,8 +65,43 @@ class ControlSystem:
                 print(f"Failed to set RCIN{ht}!")
             else:
                 print(f"SERVO{ht}_FUNCTION is set to {50 + ht}")
+    
+    def claim_gpio(self) -> bool:
+        try:
+            self.gpio_handle = lgpio.gpiochip_open(0)
+            lgpio.gpio_claim_input(self.gpio_handle)
+            return True
+        except:
+            return False
+    
+    def init_bar_sensor(self) -> bool:
+        return self.bar_sensor.init()
+    
+    def read_pressure_in_cm(self) -> float:
+        if self.bar_sensor.read():
+            return self.bar_sensor.pressure(ms5837.UNITS_cmH2O)
+        print("Failed to read pressure!")
+        return None
+     
+    def calculate_vertical_thrust(self, error: float, max_error: float):
+        pwm = 1500
+        
+        if error < -5:
+            pwm = util.map_value(error, 0, max_error, 1630, 1750)
+        
+        if error > -5:
+            pwm = util.map_value(error, 0, max_error, 1680, 1650)
             
-    def rotate(self, target_angle: float, tolerance: float = 5.0):
+        return util.constrain_value(pwm, 1350, 1750)
+            
+    def control_hover(self, current_height: float):
+        error = self.hover_height - current_height
+        print("Error:", error)
+        vertical_thrust = self.calculate_vertical_thrust(error, self.max_hover_error)
+        for i in range(len(self.vertical_pwms)):
+            self.vertical_pwms = vertical_thrust 
+            
+    def update_heading_control(self, target_angle: float, tolerance: float = 5.0):
         """Rotate the vehicle to a target angle using the shortest path
         
         Args:
@@ -77,7 +127,7 @@ class ControlSystem:
                     break
                     
                 # Calculate PWM based on absolute difference (with scaling factor)
-                pwm = min(abs(diff) * 2, 400)  # Limit maximum PWM deviation
+                pwm = min(abs(diff), 250)  # Limit maximum PWM deviation
                 pwms = [1500] * len(self.horizontal_thrusters)
                 
                 # Rotate clockwise if diff is positive, counterclockwise if negative
@@ -122,13 +172,13 @@ class ControlSystem:
         """
         
         if self.vertical_pwms:
-            self.vertical_pwms[0] = 1500 + vd
+            self.vertical_pwms[0] = 1500 - vd
             self.vertical_pwms[1] = 1500 - vd
-            self.vertical_pwms[2] = 1500 - vd
+            self.vertical_pwms[2] = 1500 + vd
             self.vertical_pwms[3] = 1500 + vd
         else:
-            print("No vertical thruster channel provided!")
-
+            print("No horizontal thruster channel provided!")
+            
         self.move()
         
     def move_downward(self, vd: float):
@@ -139,11 +189,11 @@ class ControlSystem:
         
         if self.vertical_pwms:
             self.vertical_pwms[0] = 1500 - vd
-            self.vertical_pwms[1] = 1500 + vd
+            self.vertical_pwms[1] = 1500 - vd
             self.vertical_pwms[2] = 1500 + vd
-            self.vertical_pwms[3] = 1500 - vd
+            self.vertical_pwms[3] = 1500 + vd
         else:
-            print("No vertical thruster channel provided!")
+            print("No horizontal thruster channel provided!")
 
         self.move()      
 
@@ -154,10 +204,10 @@ class ControlSystem:
         """
         
         if self.horizontal_thrusters:
-            self.horizontal_pwms[0] = 1500 - hd # forward
-            self.horizontal_pwms[1] = 1500 + hd # forward
-            self.horizontal_pwms[2] = 1500 - hd # backward
-            self.horizontal_pwms[3] = 1500 + hd # backward
+            self.horizontal_pwms[0] = 1500 + hd
+            self.horizontal_pwms[1] = 1500 + hd
+            self.horizontal_pwms[2] = 1500 - hd
+            self.horizontal_pwms[3] = 1500 - hd
         else:
             print("No horizontal thruster channel provided!")
 
@@ -170,10 +220,10 @@ class ControlSystem:
         """
         
         if self.horizontal_thrusters:
-            self.horizontal_pwms[0] = 1500 + hd # backward
+            self.horizontal_pwms[0] = 1500 - hd # backward
             self.horizontal_pwms[1] = 1500 - hd # backward
             self.horizontal_pwms[2] = 1500 + hd # forward
-            self.horizontal_pwms[3] = 1500 - hd # forward
+            self.horizontal_pwms[3] = 1500 + hd # forward
         else:
             print("No horizontal thruster channel provided!")
 
@@ -203,12 +253,45 @@ class ControlSystem:
             self.vertical_pwms[i] = 1500
             
         self.move()
-        
-    def cli_control(self):
-        hd, vd = 100, 100  
+                
+    def manual_control(self):
+        hd, vd = 100, 100
+        kill_switch_active = False
+        stop_thread = False
+
+        if self.claim_gpio():
+            print("GPIO claimed successfully")
+        else:
+            print("Failed to claim GPIO")
+            
+        if self.init_bar_sensor():
+            print("Bar sensor initialized successfully")
+        else:
+            print("Failed to initialize bar sensor")
+
+        def check_kill_switch():
+            nonlocal kill_switch_active, stop_thread
+            while not stop_thread:
+                try:
+                    if lgpio.gpio_read(self.kill_switch_gpio, self.kill_switch_gpio):
+                        if not kill_switch_active:
+                            kill_switch_active = True
+                            print("\nKill switch activated - Stopping motors")
+                            self.stop()
+                    else:
+                        kill_switch_active = False
+                    time.sleep(0.1)  # Check every 100ms
+                except:
+                    print("Failed to read kill switch status!")
+                    break
 
         try:
             self.enable_rc_control()
+
+            # Start kill switch monitoring thread
+            kill_switch_thread = threading.Thread(target=check_kill_switch)
+            kill_switch_thread.start()
+
             while True:
                 command = input("""
 Enter command:
@@ -225,10 +308,11 @@ vd <value> -> Set vertical thruster value (0-500)
 deg <value> -> Set heading angle
 ch <channel> <pwm> -> Set pwm value to channel
 : """)
-                if util.get_kill_switch_status(17):
-                    hd, vd = 0, 0
-                    print("Kill switch activated - Stopping motors")
-                
+
+                if kill_switch_active:
+                    print("Cannot execute command while kill switch is active")
+                    continue
+
                 match command:
                     case "f":
                         self.move_forward(hd)
@@ -283,7 +367,7 @@ ch <channel> <pwm> -> Set pwm value to channel
                         try:
                             deg = ControlSystem.validate_rotation_deg(float(command.split()[1]))
                             print(f"Rotating to {deg} degrees")
-                            self.rotate(deg)
+                            self.update_heading_control(deg)
                         except ValueError as e:
                             print(f"Invalid value: {str(e)}")
                     case _:
@@ -291,6 +375,18 @@ ch <channel> <pwm> -> Set pwm value to channel
         except KeyboardInterrupt:
             print("\nKeyboard interrupt - Stopping motors and exiting...")
             self.stop()
+        except Exception as e:
+            print(f"Unexpected error occurred: {str(e)}")
+            self.stop()
+        finally:
+            stop_thread = True  # Signal thread to stop
+            kill_switch_thread.join()  # Wait for thread to finish
+            try:
+                lgpio.gpio_free(self.gpio_handle, self.kill_switch)
+                lgpio.gpiochip_close(self.gpio_handle)
+            except:
+                print("Failed to free GPIO resources")
+            print("GPIO resources freed")
 
     @staticmethod
     def validate_pwm(value: float) -> float:
