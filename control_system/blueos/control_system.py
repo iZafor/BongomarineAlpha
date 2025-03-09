@@ -77,13 +77,16 @@ class ControlSystem:
     def init_bar_sensor(self) -> bool:
         return self.bar_sensor.init()
     
-    def read_pressure_in_cm(self) -> float:
+    def read_bar_sensor(self) -> float:
         if self.bar_sensor.read():
             return self.bar_sensor.pressure(ms5837.UNITS_cmH2O)
         print("Failed to read pressure!")
         return None
+    
+    def read_ping_sensor(self) -> any:
+        return util.read_message(self.conn, "DISTANCE_SENSOR", 1)
      
-    def calculate_vertical_thrust(self, error: float, max_error: float):
+    def calculate_vertical_thrust(self, error: float, max_error: float) -> float:
         pwm = 1500
         
         if error < -5:
