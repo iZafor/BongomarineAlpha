@@ -26,7 +26,7 @@ class ControlSystem:
                 horizontal_thrusters: list[int],
                 hover_height: float,
                 max_hover_error: float,
-                kill_switch_gpio: int = 17,
+                kill_switch_gpio: int,
                 ip: str = "127.0.0.1", 
                 port: int = 5777, 
                 connection_timeout: float = 10.0):
@@ -69,19 +69,47 @@ class ControlSystem:
     def claim_gpio(self) -> bool:
         try:
             self.gpio_handle = lgpio.gpiochip_open(0)
-            lgpio.gpio_claim_input(self.gpio_handle)
+            try:
+                lgpio.gpio_free(self.gpio_handle, self.kill_switch_gpio)
+            except:
+                pass
+            
+            lgpio.gpio_claim_input(self.gpio_handle, self.kill_switch_gpio)
             return True
-        except:
+        except Exception as e:
+            print(f"Failed to calim gpio. Error: {e}")
+            return False
+    
+    def free_gpio_kill_switch(self) -> bool:
+        try:
+            lgpio.gpio_free(self.gpio_handle, self.kill_switch_gpio)
+            return True
+        except Exception as e:
+            print(f"Failed to free kill switch. Error: {e}")
             return False
     
     def init_bar_sensor(self) -> bool:
-        return self.bar_sensor.init()
+        try:
+            return self.bar_sensor.init()
+        except Exception as e:
+            print(e)
+        return False
     
     def read_bar_sensor(self) -> float:
         if self.bar_sensor.read():
-            return self.bar_sensor.pressure(ms5837.UNITS_cmH2O)
+            return self.bar_sensor.pressure()
         print("Failed to read pressure!")
         return None
+    
+    def read_kill_switch_status(self) -> bool:
+        """
+        returns True if kill switch is connected, None if falied to read status
+        """
+        try:
+            return lgpio.gpio_read(self.gpio_handle, self.kill_switch_gpio) == False
+        except Exception as e:
+            print("Falied to read kill switch status! Error:", e)
+            return None
     
     def read_ping_sensor(self) -> any:
         return util.read_message(self.conn, "DISTANCE_SENSOR", 1)
@@ -104,7 +132,7 @@ class ControlSystem:
         for i in range(len(self.vertical_pwms)):
             self.vertical_pwms = vertical_thrust 
             
-    def update_heading_control(self, target_angle: float, tolerance: float = 5.0):
+    def update_heading_control(self, target_angle: float, tolerance: float = 1.0):
         """Rotate the vehicle to a target angle using the shortest path
         
         Args:
@@ -112,10 +140,11 @@ class ControlSystem:
             tolerance (float, optional): Angle difference tolerance in degrees. Defaults to 5.0.
         """
         while True:
-            attitude_data = util.read_message(self.conn, "ATTITUDE")
+            attitude_data = util.read_message(self.conn, "ATTITUDE", 1)
             if attitude_data:
                 # Convert current yaw to degrees (-179 to 179)
                 current_yaw = math.degrees(attitude_data.yaw)
+                print("current yaw:", current_yaw)
                 
                 # Calculate the angle difference considering the wraparound
                 diff = target_angle - current_yaw
@@ -131,6 +160,7 @@ class ControlSystem:
                     
                 # Calculate PWM based on absolute difference (with scaling factor)
                 pwm = min(abs(diff), 250)  # Limit maximum PWM deviation
+                print("pwm:", pwm)
                 pwms = [1500] * len(self.horizontal_thrusters)
                 
                 # Rotate clockwise if diff is positive, counterclockwise if negative
@@ -139,15 +169,15 @@ class ControlSystem:
                     pwms[0] = 1500 + pwm  # Thruster 1 forward
                     pwms[1] = 1500 - pwm  # Thruster 2 backward
                     # Row 2: Thruster 3 (CW) forward, Thruster 4 (CCW) backward
-                    pwms[2] = 1500 + pwm  # Thruster 3 forward
-                    pwms[3] = 1500 - pwm  # Thruster 4 backward
+                    pwms[2] = 1500 - pwm  # Thruster 3 forward
+                    pwms[3] = 1500 + pwm  # Thruster 4 backward
                 else:  # Counter-clockwise rotation
                     # Row 1: Thruster 1 (CCW) backward, Thruster 2 (CW) forward
                     pwms[0] = 1500 - pwm  # Thruster 1 backward
                     pwms[1] = 1500 + pwm  # Thruster 2 forward
                     # Row 2: Thruster 3 (CW) backward, Thruster 4 (CCW) forward
-                    pwms[2] = 1500 - pwm  # Thruster 3 backward
-                    pwms[3] = 1500 + pwm  # Thruster 4 forward
+                    pwms[2] = 1500 + pwm  # Thruster 3 backward
+                    pwms[3] = 1500 - pwm  # Thruster 4 forward
                     
                 # Apply the PWM values to thrusters
                 for ch, pwm in zip(self.horizontal_thrusters, pwms):    
@@ -156,17 +186,23 @@ class ControlSystem:
                     util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
             else:
                 break
-            
+        self.stop()
+
+    def validate_pwms(self, min_pwm: float = 1000.0, max_pwm: float = 2000.0):
+        for i in range(len(self.horizontal_pwms)):
+            self.horizontal_pwms[i] = util.constrain_value(self.horizontal_pwms[i], min_pwm, max_pwm)
+            self.vertical_pwms[i] = util.constrain_value(self.vertical_pwms[i], min_pwm, max_pwm)
+    
     def move(self):
         for ch, pwm in zip(self.horizontal_thrusters, self.horizontal_pwms):
             self.conn.set_servo(ch, pwm)
-            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
             
         for ch, pwm in zip(self.vertical_thrusters, self.vertical_pwms):
             self.conn.set_servo(ch, pwm)
-            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
 
     def move_upward(self, vd: float):
         """
@@ -175,8 +211,8 @@ class ControlSystem:
         """
         
         if self.vertical_pwms:
-            self.vertical_pwms[0] = 1500 - vd
-            self.vertical_pwms[1] = 1500 - vd
+            self.vertical_pwms[0] = 1500 + vd
+            self.vertical_pwms[1] = 1500 + vd
             self.vertical_pwms[2] = 1500 + vd
             self.vertical_pwms[3] = 1500 + vd
         else:
@@ -193,8 +229,8 @@ class ControlSystem:
         if self.vertical_pwms:
             self.vertical_pwms[0] = 1500 - vd
             self.vertical_pwms[1] = 1500 - vd
-            self.vertical_pwms[2] = 1500 + vd
-            self.vertical_pwms[3] = 1500 + vd
+            self.vertical_pwms[2] = 1500 - vd
+            self.vertical_pwms[3] = 1500 - vd
         else:
             print("No horizontal thruster channel provided!")
 
@@ -237,16 +273,31 @@ class ControlSystem:
         Args:
             hd (float): pwm deviation from 1500 for horizontal thrusters 
         """
-        # TODO: implement move_right
-        pass
+        if self.horizontal_thrusters:
+            self.horizontal_pwms[0] = 1500 + hd 
+            self.horizontal_pwms[1] = 1500 - hd 
+            self.horizontal_pwms[2] = 1500 + hd 
+            self.horizontal_pwms[3] = 1500 - hd 
+        else:
+            print("No horizontal thruster channel provided!")
+        
+        self.move()
+
     
     def move_left(self, hd: float):
         """
         Args:
             hd (float): pwm deviation from 1500 for horizontal thrusters 
         """
-        # TODO: implement move_left
-        pass
+        if self.horizontal_thrusters:
+            self.horizontal_pwms[0] = 1500 - hd 
+            self.horizontal_pwms[1] = 1500 + hd 
+            self.horizontal_pwms[2] = 1500 - hd 
+            self.horizontal_pwms[3] = 1500 + hd 
+        else:
+            print("No horizontal thruster channel provided!")
+        
+        self.move()
     
     def stop(self):
         for i in range(len(self.horizontal_pwms)):
@@ -276,7 +327,7 @@ class ControlSystem:
             nonlocal kill_switch_active, stop_thread
             while not stop_thread:
                 try:
-                    if lgpio.gpio_read(self.kill_switch_gpio, self.kill_switch_gpio):
+                    if lgpio.gpio_read(self.gpio_handle, self.kill_switch_gpio):
                         if not kill_switch_active:
                             kill_switch_active = True
                             print("\nKill switch activated - Stopping motors")
@@ -284,8 +335,9 @@ class ControlSystem:
                     else:
                         kill_switch_active = False
                     time.sleep(0.1)  # Check every 100ms
-                except:
+                except Exception as e:
                     print("Failed to read kill switch status!")
+                    print(e)
                     break
 
         try:
