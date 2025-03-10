@@ -12,6 +12,8 @@ bar_status = False
 current_direction = None
 thread_started = False
 
+data_file = "data/" + time.strftime("%Y-%m-%d %H:%M:%S") + ".txt"
+
 try:
     con = control_system.ControlSystem(
         horizontal_thrusters=[1, 2, 3, 4],
@@ -30,6 +32,7 @@ def manage_control():
         return
     
     while True:
+        con.write_current_state(data_file)
         kill_switch_status = con.read_kill_switch_status()
         if not kill_switch_status:
             con.horizontal_pwms = [1500] * 4

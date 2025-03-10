@@ -100,7 +100,7 @@ def set_parameter(
             break
     return True
 
-def read_message(conn: mavtcp, message_type: any, timeout: float, print_message: bool = True) -> any:
+def read_message(conn: mavtcp, message_type: any, timeout: float = 1.0, print_message: bool = True) -> any:
     """
     Reads a specific MAVLink message from the connection.
 

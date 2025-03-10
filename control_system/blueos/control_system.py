@@ -5,6 +5,7 @@ import lgpio
 import threading
 import time
 import ms5837
+import time
 
 CONST = mavutil.mavlink
 
@@ -13,8 +14,8 @@ class ControlSystem:
     Args:
         vertical_thrusters (list[int]): channels for vertical thrusters from top to bottom row by row
         horizontal_thrusters (list[int]): channels for horizontal thrusters from top to bottom row by row
-        ip (str, optional): Defaults to "127.0.0.1".
-        port (int, optional): Defaults to 5777.
+        device (str, optional): Defaults to "/dev/ttyACM0".
+        baud (int, optional): Defaults to 57600.
         connection_timeout (float, optional): Defaults to 10.0.
 
     Raises:
@@ -27,12 +28,12 @@ class ControlSystem:
                 hover_height: float,
                 max_hover_error: float,
                 kill_switch_gpio: int,
-                ip: str = "127.0.0.1", 
-                port: int = 5777, 
+                device: str = "/dev/ttyACM0", 
+                baud: int = 57600, 
                 connection_timeout: float = 10.0):
-        print(f"Connecting to a tcp connection at {ip}:{port}...")
+        print(f"Connecting to a tcp connection at {device}:{baud}...")
         
-        self.conn = mavutil.mavlink_connection(f"tcp:{ip}:{port}")
+        self.conn = mavutil.mavlink_connection(device, baud=baud)
         msg = self.conn.wait_heartbeat(timeout=connection_timeout)
         if not msg:
             raise Exception("Failed to make connection!")
@@ -68,7 +69,7 @@ class ControlSystem:
     
     def claim_gpio(self) -> bool:
         try:
-            self.gpio_handle = lgpio.gpiochip_open(0)
+            self.gpio_handle = lgpio.device_open(0)
             try:
                 lgpio.gpio_free(self.gpio_handle, self.kill_switch_gpio)
             except:
@@ -196,13 +197,13 @@ class ControlSystem:
     def move(self):
         for ch, pwm in zip(self.horizontal_thrusters, self.horizontal_pwms):
             self.conn.set_servo(ch, pwm)
-            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
             
         for ch, pwm in zip(self.vertical_thrusters, self.vertical_pwms):
             self.conn.set_servo(ch, pwm)
-            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
 
     def move_upward(self, vd: float):
         """
@@ -438,10 +439,32 @@ ch <channel> <pwm> -> Set pwm value to channel
             kill_switch_thread.join()  # Wait for thread to finish
             try:
                 lgpio.gpio_free(self.gpio_handle, self.kill_switch)
-                lgpio.gpiochip_close(self.gpio_handle)
+                lgpio.device_close(self.gpio_handle)
             except:
                 print("Failed to free GPIO resources")
             print("GPIO resources freed")
+
+    def write_current_state(self, file_path: str):
+        attitude = util.read_message(self.conn, "ATTITUDE", 1)
+        yaw = None
+        roll = None
+        pitch = None
+        if attitude:    
+            yaw = math.degrees(attitude.yaw)
+            roll = math.degrees(attitude.roll)
+            pitch = math.degrees(attitude.pitch)
+        bar = self.read_bar_sensor()
+        ping = self.read_ping_sensor()
+        current_distance = None
+        if ping:
+            current_distance = ping.current_distance
+
+        with open(file_path, "a+") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S") + ";")
+            f.write(f"yaw={yaw};roll={roll};pitch={pitch};")
+            f.write(f"bar_pressure={bar};ping_distance={current_distance};")
+            f.write(f"vertical_pwms={self.vertical_pwms}\n")
+            f.write(f"horizontal_pwms={self.horizontal_pwms}\n")
 
     @staticmethod
     def validate_pwm(value: float) -> float:
