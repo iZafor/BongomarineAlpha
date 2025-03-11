@@ -31,7 +31,7 @@ class ControlSystem:
                 device: str = "/dev/ttyACM0", 
                 baud: int = 57600, 
                 connection_timeout: float = 10.0):
-        print(f"Connecting to a tcp connection at {device}:{baud}...")
+        print(f"Connecting to a pixhawk at {device}:{baud}...")
         
         self.conn = mavutil.mavlink_connection(device, baud=baud)
         msg = self.conn.wait_heartbeat(timeout=connection_timeout)
@@ -69,7 +69,7 @@ class ControlSystem:
     
     def claim_gpio(self) -> bool:
         try:
-            self.gpio_handle = lgpio.device_open(0)
+            self.gpio_handle = lgpio.gpiochip_open(0)
             try:
                 lgpio.gpio_free(self.gpio_handle, self.kill_switch_gpio)
             except:
@@ -84,6 +84,7 @@ class ControlSystem:
     def free_gpio_kill_switch(self) -> bool:
         try:
             lgpio.gpio_free(self.gpio_handle, self.kill_switch_gpio)
+            lgpio.gpiochip_close(self.gpio_handle)
             return True
         except Exception as e:
             print(f"Failed to free kill switch. Error: {e}")
@@ -104,12 +105,12 @@ class ControlSystem:
     
     def read_kill_switch_status(self) -> bool:
         """
-        returns True if kill switch is connected, None if falied to read status
+        returns True if kill switch is connected, None if failed to read status
         """
         try:
             return lgpio.gpio_read(self.gpio_handle, self.kill_switch_gpio) == False
         except Exception as e:
-            print("Falied to read kill switch status! Error:", e)
+            print("Failed to read kill switch status! Error:", e)
             return None
     
     def read_ping_sensor(self) -> any:
@@ -138,14 +139,14 @@ class ControlSystem:
         
         Args:
             target_angle (float): Target angle in degrees (-179 to 179)
-            tolerance (float, optional): Angle difference tolerance in degrees. Defaults to 5.0.
+            tolerance (float, optional): Angle difference tolerance in degrees. Defaults to 1.0.
         """
         while True:
             attitude_data = util.read_message(self.conn, "ATTITUDE", 1)
             if attitude_data:
                 # Convert current yaw to degrees (-179 to 179)
                 current_yaw = math.degrees(attitude_data.yaw)
-                print("current yaw:", current_yaw)
+                # print("current yaw:", current_yaw)
                 
                 # Calculate the angle difference considering the wraparound
                 diff = target_angle - current_yaw
@@ -164,27 +165,21 @@ class ControlSystem:
                 print("pwm:", pwm)
                 pwms = [1500] * len(self.horizontal_thrusters)
                 
-                # Rotate clockwise if diff is positive, counterclockwise if negative
                 if diff > 0:  # Clockwise rotation
-                    # Row 1: Thruster 1 (CCW) forward, Thruster 2 (CW) backward
-                    pwms[0] = 1500 + pwm  # Thruster 1 forward
-                    pwms[1] = 1500 - pwm  # Thruster 2 backward
-                    # Row 2: Thruster 3 (CW) forward, Thruster 4 (CCW) backward
-                    pwms[2] = 1500 - pwm  # Thruster 3 forward
-                    pwms[3] = 1500 + pwm  # Thruster 4 backward
+                    pwms[0] = 1500 + pwm  
+                    pwms[1] = 1500 - pwm  
+                    pwms[2] = 1500 - pwm  
+                    pwms[3] = 1500 + pwm  
                 else:  # Counter-clockwise rotation
-                    # Row 1: Thruster 1 (CCW) backward, Thruster 2 (CW) forward
-                    pwms[0] = 1500 - pwm  # Thruster 1 backward
-                    pwms[1] = 1500 + pwm  # Thruster 2 forward
-                    # Row 2: Thruster 3 (CW) backward, Thruster 4 (CCW) forward
-                    pwms[2] = 1500 + pwm  # Thruster 3 backward
-                    pwms[3] = 1500 - pwm  # Thruster 4 forward
+                    pwms[0] = 1500 - pwm  
+                    pwms[1] = 1500 + pwm  
+                    pwms[2] = 1500 + pwm  
+                    pwms[3] = 1500 - pwm  
                     
-                # Apply the PWM values to thrusters
                 for ch, pwm in zip(self.horizontal_thrusters, pwms):    
                     self.conn.set_servo(ch, pwm)
-                    print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-                    util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+                    # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+                    # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
             else:
                 break
         self.stop()
@@ -197,13 +192,13 @@ class ControlSystem:
     def move(self):
         for ch, pwm in zip(self.horizontal_thrusters, self.horizontal_pwms):
             self.conn.set_servo(ch, pwm)
-            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
             
         for ch, pwm in zip(self.vertical_thrusters, self.vertical_pwms):
             self.conn.set_servo(ch, pwm)
-            print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
-            util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
+            # print(f"Sent MAV_CMD_DO_SET_SERVO: channel={ch}, PWM={pwm}, waiting for ACK...")
+            # util.verify_command_received(self.conn, CONST.MAV_CMD_DO_SET_SERVO)
 
     def move_upward(self, vd: float):
         """
@@ -313,6 +308,7 @@ class ControlSystem:
         hd, vd = 100, 100
         kill_switch_active = False
         stop_thread = False
+        log_file = "./log" + time.strftime("%Y-%m-%d_%H-%M-%S") + ".txt"
 
         if self.claim_gpio():
             print("GPIO claimed successfully")
@@ -323,6 +319,12 @@ class ControlSystem:
             print("Bar sensor initialized successfully")
         else:
             print("Failed to initialize bar sensor")
+
+        def log_current_state(delay: float = 1.0):
+            nonlocal log_file, stop_thread
+            while not stop_thread:
+                self.write_current_state(log_file, print_state=False) 
+                time.sleep(delay)
 
         def check_kill_switch():
             nonlocal kill_switch_active, stop_thread
@@ -346,7 +348,9 @@ class ControlSystem:
 
             # Start kill switch monitoring thread
             kill_switch_thread = threading.Thread(target=check_kill_switch)
+            logging_thread = threading.Thread(target=log_current_state, args=(1,))
             kill_switch_thread.start()
+            logging_thread.start()
 
             while True:
                 command = input("""
@@ -437,14 +441,20 @@ ch <channel> <pwm> -> Set pwm value to channel
         finally:
             stop_thread = True  # Signal thread to stop
             kill_switch_thread.join()  # Wait for thread to finish
+            logging_thread.join()
             try:
-                lgpio.gpio_free(self.gpio_handle, self.kill_switch)
-                lgpio.device_close(self.gpio_handle)
+                self.free_gpio_kill_switch
             except:
                 print("Failed to free GPIO resources")
             print("GPIO resources freed")
 
-    def write_current_state(self, file_path: str):
+    def write_current_state(self, file_path: str, print_state: bool = True):
+        """Writes current state of the vehicle to a log file
+
+        Args:
+            file_path (str): Path to the log file
+        """
+        
         attitude = util.read_message(self.conn, "ATTITUDE", 1)
         yaw = None
         roll = None
@@ -459,12 +469,16 @@ ch <channel> <pwm> -> Set pwm value to channel
         if ping:
             current_distance = ping.current_distance
 
-        with open(file_path, "a+") as f:
-            f.write(time.strftime("%Y-%m-%d %H:%M:%S") + ";")
-            f.write(f"yaw={yaw};roll={roll};pitch={pitch};")
-            f.write(f"bar_pressure={bar};ping_distance={current_distance};")
-            f.write(f"vertical_pwms={self.vertical_pwms}\n")
-            f.write(f"horizontal_pwms={self.horizontal_pwms}\n")
+        with open(file_path, "+a") as f:
+            log = time.strftime("%Y-%m-%d %H:%M:%S") + ";"
+            log += f"yaw={yaw};roll={roll};pitch={pitch};"
+            log += f"bar_pressure={bar};"
+            log += f"ping_distance={current_distance};"
+            log += f"vertical_pwms={self.vertical_pwms};"
+            log += f"horizontal_pwms={self.horizontal_pwms}\n"
+            if print_state:
+                print(log)
+            f.write(log)
 
     @staticmethod
     def validate_pwm(value: float) -> float:

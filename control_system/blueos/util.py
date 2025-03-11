@@ -1,5 +1,5 @@
 import time
-from pymavlink.mavutil import mavlink, mavtcp
+from pymavlink.mavutil import mavlink
 
 CONST = mavlink
 
@@ -35,10 +35,10 @@ def constrain_value(value: float, lower_end: float, upper_end: float) -> float:
         return upper_end
     return value
 
-def verify_command_received(conn: mavtcp, command: any, timeout: float = 3) -> bool: 
+def verify_command_received(conn: any, command: any, timeout: float = 3) -> bool: 
     """
     Args:
-        conn (mavtcp): Established tcp connection
+        conn (any): Established MAVLink connection
         command (any): Command to verify
         timeout (float, optional): Time to wait for in seconds. Defaults to 3.
 
@@ -67,7 +67,7 @@ def verify_command_received(conn: mavtcp, command: any, timeout: float = 3) -> b
     return False
     
 def set_parameter(
-    conn: mavtcp, 
+    conn: any, 
     param_name: str, 
     param_value: float, 
     param_type: any = CONST.MAV_PARAM_TYPE_REAL32, 
@@ -100,12 +100,12 @@ def set_parameter(
             break
     return True
 
-def read_message(conn: mavtcp, message_type: any, timeout: float = 1.0, print_message: bool = True) -> any:
+def read_message(conn: any, message_type: any, timeout: float = 1.0, print_message: bool = True) -> any:
     """
     Reads a specific MAVLink message from the connection.
 
     Args:
-        conn (mavtcp): Established MAVLink connection
+        conn (any): Established MAVLink connection
         message_type (any): Type of message to read
         timeout (float): Time to wait for message in seconds
 

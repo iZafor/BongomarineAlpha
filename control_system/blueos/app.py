@@ -12,7 +12,7 @@ bar_status = False
 current_direction = None
 thread_started = False
 
-data_file = "data/" + time.strftime("%Y-%m-%d %H:%M:%S") + ".txt"
+data_file = "./log/" + time.strftime("%Y-%m-%d_%H:%M:%S") + ".txt"
 
 try:
     con = control_system.ControlSystem(
@@ -30,6 +30,7 @@ def manage_control():
     
     if not con:
         return
+    print("Managing control directions")
     
     while True:
         con.write_current_state(data_file)
@@ -119,5 +120,6 @@ def control():
     return jsonify({"message": "received"})
 
 if __name__ == "__main__":    
-    app.run(debug=True, host="0.0.0.0")
-    print(con.free_gpio_kill_switch())
+    app.run(debug=True, host="0.0.0.0", use_reloader=False)
+    if con:
+        con.free_gpio_kill_switch()
